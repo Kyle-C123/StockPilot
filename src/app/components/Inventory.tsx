@@ -55,6 +55,9 @@ export function Inventory() {
     threshold: 10
   });
 
+  // Delete State
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ id: string, name: string } | null>(null);
+
   useEffect(() => {
     const productsRef = ref(database, 'Inventory');
     const unsubscribe = onValue(productsRef, (snapshot) => {
@@ -147,15 +150,20 @@ export function Inventory() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete ${name}?`)) {
-      try {
-        const itemRef = ref(database, `Inventory/${id}`);
-        await remove(itemRef);
-      } catch (error) {
-        console.error("Error deleting product:", error);
-        alert("Failed to delete product");
-      }
+  const handleDelete = (id: string, name: string) => {
+    setDeleteConfirmation({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation) return;
+
+    try {
+      const itemRef = ref(database, `Inventory/${deleteConfirmation.id}`);
+      await remove(itemRef);
+      setDeleteConfirmation(null); // Close modal on success
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      alert("Failed to delete product");
     }
   };
 
@@ -623,6 +631,37 @@ export function Inventory() {
                   Add Product
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 text-center">
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Delete Product?</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-gray-900 dark:text-white">"{deleteConfirmation.name}"</span>?
+              This action cannot be undone.
+            </p>
+
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => setDeleteConfirmation(null)}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-lg shadow-red-500/20 transition-all active:scale-95"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

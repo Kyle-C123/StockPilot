@@ -45,6 +45,9 @@ export function Messages() {
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
     const [editText, setEditText] = useState('');
 
+    // Delete State
+    const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null); // Stores ID of message to delete
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -165,11 +168,22 @@ export function Messages() {
         setEditingMessageId(null);
     };
 
-    const handleDelete = async (msgId: string) => {
-        if (!confirm('Delete this message?') || !selectedUser || !currentUser) return;
-        const chatId = [currentUser.id, selectedUser.id].sort().join('_');
-        const msgRef = ref(database, `messages/${chatId}/${msgId}`);
-        await remove(msgRef);
+    const handleDelete = (msgId: string) => {
+        setDeleteConfirmation(msgId);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteConfirmation || !selectedUser || !currentUser) return;
+
+        try {
+            const chatId = [currentUser.id, selectedUser.id].sort().join('_');
+            const msgRef = ref(database, `messages/${chatId}/${deleteConfirmation}`);
+            await remove(msgRef);
+            setDeleteConfirmation(null); // Close modal
+        } catch (error) {
+            console.error("Error deleting message:", error);
+            alert("Failed to delete message");
+        }
     };
 
     const formatTime = (timestamp: number) => {
@@ -197,8 +211,8 @@ export function Messages() {
                             key={user.id}
                             onClick={() => setSelectedUser(user)}
                             className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${selectedUser?.id === user.id
-                                    ? 'bg-blue-50 dark:bg-blue-900/20'
-                                    : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                                ? 'bg-blue-50 dark:bg-blue-900/20'
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                                 }`}
                         >
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-medium">
@@ -246,8 +260,8 @@ export function Messages() {
                                 return (
                                     <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group`}>
                                         <div className={`max-w-[70%] rounded-2xl p-4 shadow-sm relative ${isMe
-                                                ? 'bg-blue-600 text-white rounded-br-none'
-                                                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none border border-gray-100 dark:border-gray-700'
+                                            ? 'bg-blue-600 text-white rounded-br-none'
+                                            : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none border border-gray-100 dark:border-gray-700'
                                             }`}>
                                             {/* Edit/Delete Actions (Sender Only) */}
                                             {isMe && !isEditing && (
@@ -350,7 +364,39 @@ export function Messages() {
                         <p className="max-w-xs mx-auto">Choose a user from the sidebar to start chatting, sending files, and collaborating in real-time.</p>
                     </div>
                 )}
+
             </div>
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmation && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 text-center">
+                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Delete Message?</h2>
+                        <p className="text-gray-600 dark:text-gray-400 mb-6">
+                            Are you sure you want to delete this message?
+                            This action cannot be undone.
+                        </p>
+
+                        <div className="flex gap-3 justify-center">
+                            <button
+                                onClick={() => setDeleteConfirmation(null)}
+                                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-lg shadow-red-500/20 transition-all active:scale-95"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
