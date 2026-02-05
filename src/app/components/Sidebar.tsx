@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   History,
   Package,
+  MessageSquare,
   Shield,
   Menu,
   X,
@@ -16,6 +17,7 @@ const menuItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/login-history', label: 'Login History', icon: History },
   { path: '/inventory', label: 'Inventory', icon: Package },
+  { path: '/messages', label: 'Messages', icon: MessageSquare },
   { path: '/admin', label: 'Admin', icon: Shield },
 ];
 
