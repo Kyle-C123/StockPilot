@@ -193,7 +193,10 @@ export function Messages() {
     return (
         <div className="flex h-[calc(100vh-2rem)] gap-6">
             {/* Users List Sidebar */}
-            <div className="w-80 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col">
+            <div className={`
+                w-full md:w-80 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex-col
+                ${selectedUser ? 'hidden md:flex' : 'flex'}
+            `}>
                 <div className="p-4 border-b border-gray-200 dark:border-gray-800">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Messages</h2>
                     <div className="relative">
@@ -232,12 +235,23 @@ export function Messages() {
             </div>
 
             {/* Chat Area */}
-            <div className="flex-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
+            <div className={`
+                flex-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex-col overflow-hidden
+                ${selectedUser ? 'flex' : 'hidden md:flex'}
+            `}>
                 {selectedUser ? (
                     <>
                         {/* Chat Header */}
                         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                             <div className="flex items-center gap-3">
+                                {/* Back Button for Mobile */}
+                                <button
+                                    onClick={() => setSelectedUser(null)}
+                                    className="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-medium">
                                     {selectedUser.name.charAt(0).toUpperCase()}
                                 </div>
@@ -259,7 +273,7 @@ export function Messages() {
 
                                 return (
                                     <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group`}>
-                                        <div className={`max-w-[70%] rounded-2xl p-4 shadow-sm relative ${isMe
+                                        <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-4 shadow-sm relative ${isMe
                                             ? 'bg-blue-600 text-white rounded-br-none'
                                             : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none border border-gray-100 dark:border-gray-700'
                                             }`}>
