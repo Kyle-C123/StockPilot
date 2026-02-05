@@ -2,23 +2,17 @@ import { useEffect, useState } from 'react';
 import {
   Plus,
   Search,
-  Grid3x3,
-  List,
   Edit,
   Trash2,
   Download,
   ChevronLeft,
   ChevronRight,
   Save,
-  X,
-  CheckCircle,
-  AlertTriangle,
-  XCircle
+  X
 } from 'lucide-react';
 import { ref, onValue, update, remove, push } from 'firebase/database';
 import { database } from '../../lib/firebase';
 
-const categories = ['All', 'Produce', 'Other'];
 const ITEMS_PER_PAGE = 6;
 
 type InventoryItem = {
@@ -45,12 +39,21 @@ export function Inventory() {
   // activeTab replaces viewMode. 'inventory' = Grid, 'history' = Table
   const [activeTab, setActiveTab] = useState<'inventory' | 'history'>('inventory');
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
 
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<InventoryItem>>({});
+
+  // Add State
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    sku: '',
+    quantity: 0,
+    price: 0,
+    threshold: 10
+  });
 
   useEffect(() => {
     const productsRef = ref(database, 'Inventory');
@@ -100,12 +103,12 @@ export function Inventory() {
   }, []);
 
   // Filter products
+  // Filter products
   const filteredProducts = products.filter(product => {
-    const matchesSearch =
+    return (
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = categoryFilter === 'All' || product.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+      product.sku.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
   // Pagination
@@ -156,8 +159,46 @@ export function Inventory() {
     }
   };
 
-  const handleAddNew = async () => {
-    alert("To add a new product, I would need a form. For now, try editing existing ones!");
+  const handleAddNew = () => {
+    setIsAddingNew(true);
+    setNewProductForm({
+      name: '',
+      sku: '',
+      quantity: 0,
+      price: 0,
+      threshold: 10
+    });
+  };
+
+  const handleSaveNew = async () => {
+    if (!newProductForm.name || !newProductForm.sku) {
+      alert("Name and Object ID are required");
+      return;
+    }
+
+    try {
+      const itemsRef = ref(database, 'Inventory');
+      // Create a new key based on name or let push generate one
+      // Using push() generates a unique key. 
+      // If we want to use the Name as the key (like the existing data seems to use sometimes),
+      // we would use update(). But push() is safer for unique IDs.
+      // However, the existing code uses `const loadedProducts = Object.entries(data).map(([key, value])`
+      // where key is used.
+
+      await push(itemsRef, {
+        Name: newProductForm.name,
+        ObjectID: newProductForm.sku,
+        Quantity: Number(newProductForm.quantity),
+        "Unit Price": Number(newProductForm.price),
+        Threshold: Number(newProductForm.threshold),
+        Time_restock: new Date().toISOString().slice(0, 19).replace('T', ' ')
+      });
+
+      setIsAddingNew(false);
+    } catch (error) {
+      console.error("Error adding product:", error);
+      alert("Failed to add product");
+    }
   };
 
   return (
@@ -188,8 +229,8 @@ export function Inventory() {
             <button
               onClick={() => { setActiveTab('inventory'); setCurrentPage(1); }}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'inventory'
-                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
             >
               Inventory
@@ -197,8 +238,8 @@ export function Inventory() {
             <button
               onClick={() => { setActiveTab('history'); setCurrentPage(1); }}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'history'
-                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
             >
               Inventory History
@@ -498,6 +539,91 @@ export function Inventory() {
             >
               <ChevronRight className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Product Modal */}
+      {isAddingNew && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-800">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add New Product</h2>
+              <button
+                onClick={() => setIsAddingNew(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Product Name</label>
+                <input
+                  value={newProductForm.name}
+                  onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  placeholder="e.g. Green Mango"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Object ID (SKU)</label>
+                <input
+                  value={newProductForm.sku}
+                  onChange={e => setNewProductForm({ ...newProductForm, sku: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  placeholder="e.g. MNG-001"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    value={newProductForm.quantity}
+                    onChange={e => setNewProductForm({ ...newProductForm, quantity: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unit Price (₱)</label>
+                  <input
+                    type="number"
+                    value={newProductForm.price}
+                    onChange={e => setNewProductForm({ ...newProductForm, price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Low Stock Threshold</label>
+                <input
+                  type="number"
+                  value={newProductForm.threshold}
+                  onChange={e => setNewProductForm({ ...newProductForm, threshold: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  onClick={() => setIsAddingNew(false)}
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveNew}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+                >
+                  Add Product
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
