@@ -3,58 +3,18 @@ import {
   AlertTriangle,
   Clock,
   DollarSign,
-  TrendingUp,
-  TrendingDown,
+  ArrowUpRight,
+  ArrowDownRight,
   Plus,
   Download,
   RefreshCw,
-  ArrowUpRight,
-  ArrowDownRight
+  Info
 } from 'lucide-react';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useEffect, useState } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { database } from '../../lib/firebase';
-
-// Mock data fallbacks (used if DB is empty or loading)
-const defaultMetrics = [
-  {
-    id: 1,
-    title: 'Total Products',
-    value: '0',
-    change: '0%',
-    trend: 'up' as const,
-    icon: Package,
-    color: 'blue',
-  },
-  {
-    id: 2,
-    title: 'Low Stock Items',
-    value: '0',
-    change: '0%',
-    trend: 'down' as const,
-    icon: AlertTriangle,
-    color: 'orange',
-  },
-  {
-    id: 3,
-    title: 'Pending Orders',
-    value: '0',
-    change: '0%',
-    trend: 'up' as const,
-    icon: Clock,
-    color: 'purple',
-  },
-  {
-    id: 4,
-    title: 'Revenue Today',
-    value: '$0',
-    change: '0%',
-    trend: 'up' as const,
-    icon: DollarSign,
-    color: 'green',
-  },
-];
+import { useNavigate } from 'react-router-dom';
 
 const colorMap = {
   blue: 'from-blue-500 to-blue-600',
@@ -63,65 +23,139 @@ const colorMap = {
   green: 'from-green-500 to-green-600',
 };
 
-const statusColors = {
-  Processing: 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400',
-  Shipped: 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400',
-  Delivered: 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400',
-};
-
 export function Dashboard() {
-  const [metrics, setMetrics] = useState(defaultMetrics);
-  const [stockData, setStockData] = useState<{ month: string; stock: number }[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const [metrics, setMetrics] = useState([
+    {
+      id: 1,
+      title: 'Total Products',
+      value: '0',
+      change: 'Live',
+      trend: 'up' as const,
+      icon: Package,
+      color: 'blue',
+    },
+    {
+      id: 2,
+      title: 'Low Stock Items',
+      value: '0',
+      change: 'Action Needed',
+      trend: 'down' as const,
+      icon: AlertTriangle,
+      color: 'orange',
+    },
+    {
+      id: 3,
+      title: "Today's Logins",
+      value: '0',
+      change: 'Live Activity',
+      trend: 'up' as const,
+      icon: Clock,
+      color: 'purple',
+    },
+    {
+      id: 4,
+      title: 'Inventory Value',
+      value: '$0',
+      change: 'Estimated',
+      trend: 'up' as const,
+      icon: DollarSign,
+      color: 'green',
+    },
+  ]);
+
+  const [stockData, setStockData] = useState<{ name: string; quantity: number }[]>([]);
+  const [recentLogins, setRecentLogins] = useState<any[]>([]);
 
   useEffect(() => {
-    const metricsRef = ref(database, 'dashboard/metrics');
-    const unsubscribeMetrics = onValue(metricsRef, (snapshot) => {
+    // === INVENTORY DATA ===
+    const inventoryRef = ref(database, 'Inventory');
+    const unsubscribeInventory = onValue(inventoryRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        setMetrics(Object.values(data).map((m: any) => ({
-          ...m,
-          icon: [Package, AlertTriangle, Clock, DollarSign][(m.id - 1) % 4]
-        })));
+        const items = Object.values(data) as any[];
+
+        // 1. Metrics Calculation
+        const totalProducts = items.length;
+        const lowStockCount = items.filter((i: any) => Number(i.Quantity || 0) <= Number(i.Threshold || 5)).length;
+        const totalValue = items.reduce((sum: number, i: any) => sum + (Number(i.Quantity || 0) * Number(i['Unit Price'] || 0)), 0);
+
+        // 2. Chart Data (Current Stock Levels)
+        const chartData = items.map((i: any) => ({
+          name: i.Name,
+          quantity: Number(i.Quantity || 0)
+        })).slice(0, 10); // Limit to top 10 for readability
+
+        setStockData(chartData);
+
+        setMetrics(prev => prev.map(m => {
+          if (m.title === 'Total Products') return { ...m, value: totalProducts.toString() };
+          if (m.title === 'Low Stock Items') return { ...m, value: lowStockCount.toString(), trend: lowStockCount > 0 ? 'down' : 'up' };
+          if (m.title === 'Inventory Value') return { ...m, value: `₱${totalValue.toLocaleString()}` };
+          return m;
+        }));
       }
     });
 
-    const stockRef = ref(database, 'dashboard/stockData');
-    const unsubscribeStock = onValue(stockRef, (snapshot) => {
+    // === ATTENDANCE DATA ===
+    const attendanceRef = ref(database, 'Attendance');
+    const unsubscribeAttendance = onValue(attendanceRef, (snapshot) => {
       const data = snapshot.val();
-      if (data) setStockData(Object.values(data));
-    });
+      if (data) {
+        // Flatten Data
+        const logins: any[] = [];
+        const todayStr = new Date().toISOString().split('T')[0];
 
-    const activityRef = ref(database, 'dashboard/recentActivity');
-    const unsubscribeActivity = onValue(activityRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) setRecentActivity(Object.values(data));
-    });
+        Object.entries(data).forEach(([dateKey, users]) => {
+          if (typeof users === 'object' && users !== null) {
+            Object.entries(users).forEach(([userKey, record]: [string, any]) => {
+              logins.push({
+                id: `${dateKey}_${userKey}`,
+                user: record.Name || userKey,
+                date: dateKey,
+                time: record.Time_in || '--:--',
+                status: 'Success'
+              });
+            });
+          }
+        });
 
-    const ordersRef = ref(database, 'dashboard/recentOrders');
-    const unsubscribeOrders = onValue(ordersRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) setRecentOrders(Object.values(data));
+        // Sort by Date/Time Descending
+        logins.sort((a, b) => {
+          const dateA = new Date(`${a.date}T${a.time}`);
+          const dateB = new Date(`${b.date}T${b.time}`);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+        const todayCount = logins.filter(l => l.date === todayStr).length;
+
+        setRecentLogins(logins.slice(0, 5)); // Top 5 recent
+
+        setMetrics(prev => prev.map(m => {
+          if (m.title === "Today's Logins") return { ...m, value: todayCount.toString() };
+          return m;
+        }));
+      }
     });
 
     return () => {
-      unsubscribeMetrics();
-      unsubscribeStock();
-      unsubscribeActivity();
-      unsubscribeOrders();
+      unsubscribeInventory();
+      unsubscribeAttendance();
     };
   }, []);
+
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
-      <div>
-        <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">
-          Welcome back, John! 👋
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Here's what's happening with your inventory today
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">
+            Dashboard Overview
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Real-time insights from your stock and attendance
+          </p>
+        </div>
       </div>
 
       {/* Metrics Cards */}
@@ -134,10 +168,10 @@ export function Dashboard() {
             <div
               key={metric.id}
               className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800 
-                       hover:shadow-lg transition-shadow duration-200"
+                       hover:shadow-lg transition-shadow duration-200 relative overflow-hidden"
             >
               <div className="flex items-start justify-between">
-                <div className="flex-1">
+                <div className="flex-1 relative z-10">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                     {metric.title}
                   </p>
@@ -159,11 +193,10 @@ export function Dashboard() {
                     >
                       {metric.change}
                     </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">vs last month</span>
                   </div>
                 </div>
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${colorMap[metric.color]} 
-                              flex items-center justify-center`}>
+                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${colorMap[metric.color as keyof typeof colorMap]} 
+                              flex items-center justify-center relative z-10 shadow-md`}>
                   <Icon className="w-6 h-6 text-white" />
                 </div>
               </div>
@@ -172,54 +205,36 @@ export function Dashboard() {
         })}
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-        <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
-                           flex items-center gap-2 transition-colors">
-            <Plus className="w-4 h-4" />
-            Add Product
-          </button>
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 
-                           dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg 
-                           flex items-center gap-2 transition-colors">
-            <Download className="w-4 h-4" />
-            Export Data
-          </button>
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 
-                           dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg 
-                           flex items-center gap-2 transition-colors">
-            <RefreshCw className="w-4 h-4" />
-            Sync Inventory
-          </button>
-        </div>
-      </div>
-
       {/* Charts and Activity Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Stock Level Chart */}
         <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Stock Level Trend
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Current Stock Levels
+            </h2>
+            <button
+              onClick={() => navigate('/inventory')}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              View Inventory
+            </button>
+          </div>
           <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={stockData}>
-              <defs>
-                <linearGradient id="stockGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-800" />
+            <BarChart data={stockData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-800" vertical={false} />
               <XAxis
-                dataKey="month"
-                className="text-sm"
+                dataKey="name"
+                className="text-xs"
                 tick={{ fill: 'currentColor' }}
+                axisLine={false}
+                tickLine={false}
               />
               <YAxis
-                className="text-sm"
+                className="text-xs"
                 tick={{ fill: 'currentColor' }}
+                axisLine={false}
+                tickLine={false}
               />
               <Tooltip
                 contentStyle={{
@@ -228,69 +243,76 @@ export function Dashboard() {
                   borderRadius: '8px',
                   color: 'white'
                 }}
+                cursor={{ fill: 'transparent' }}
               />
-              <Area
-                type="monotone"
-                dataKey="stock"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                fill="url(#stockGradient)"
+              <Bar
+                dataKey="quantity"
+                fill="#3b82f6"
+                radius={[4, 4, 0, 0]}
+                barSize={40}
               />
-            </AreaChart>
+            </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Recent Activity */}
+        {/* Recent Activity List */}
         <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Recent Activity
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Recent Login Activity
+            </h2>
+            <button
+              onClick={() => navigate('/login-history')}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              View All
+            </button>
+          </div>
           <div className="space-y-4">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-gray-100 
-                                              dark:border-gray-800 last:border-0 last:pb-0">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 
-                              flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-sm font-semibold">
-                    {activity.user.split(' ').map(n => n[0]).join('')}
-                  </span>
+            {recentLogins.length === 0 ? (
+              <p className="text-gray-500 text-sm">No recent activity found.</p>
+            ) : (
+              recentLogins.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-gray-100 
+                                                dark:border-gray-800 last:border-0 last:pb-0">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 
+                                flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-sm font-semibold">
+                      {activity.user.split(' ').map((n: string) => n[0]).join('')}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900 dark:text-white">
+                      <span className="font-medium">{activity.user}</span> logged in
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      {activity.date} at {activity.time}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900 dark:text-white">
-                    <span className="font-medium">{activity.user}</span> {activity.action}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{activity.item}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{activity.time}</p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
 
-      {/* Recent Orders Table */}
+      {/* Recent Logins Table */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Orders</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Attendance Records</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Order ID
+                  User
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Customer
+                  Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Product
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Quantity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Total
+                  Time
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
@@ -298,26 +320,20 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {recentOrders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+              {recentLogins.map((login) => (
+                <tr key={login.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                    {order.id}
+                    {login.user}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                    {order.customer}
+                    {login.date}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                    {order.product}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                    {order.quantity}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                    {order.total}
+                    {login.time}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[order.status as keyof typeof statusColors]}`}>
-                      {order.status}
+                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                      Success
                     </span>
                   </td>
                 </tr>

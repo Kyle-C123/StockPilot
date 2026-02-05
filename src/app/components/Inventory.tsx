@@ -2,21 +2,37 @@ import { useEffect, useState } from 'react';
 import {
   Plus,
   Search,
-  Filter,
   Grid3x3,
   List,
   Edit,
   Trash2,
   Download,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Save,
+  X,
+  CheckCircle,
+  AlertTriangle,
+  XCircle
 } from 'lucide-react';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, update, remove, push } from 'firebase/database';
 import { database } from '../../lib/firebase';
 
-const categories = ['All', 'Electronics', 'Accessories', 'Office'];
-const statuses = ['All', 'In Stock', 'Low Stock', 'Out of Stock'];
+const categories = ['All', 'Produce', 'Other'];
 const ITEMS_PER_PAGE = 6;
+
+type InventoryItem = {
+  id: string; // The key from firebase (e.g. "Green Manggo")
+  name: string;
+  sku: string; // ObjectID
+  quantity: number;
+  price: number;
+  threshold: number;
+  time_restock?: string;
+  category: string;
+  image: string;
+  status: 'In Stock' | 'Low Stock' | 'Out of Stock';
+};
 
 const statusColors = {
   'In Stock': 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400',
@@ -25,23 +41,63 @@ const statusColors = {
 };
 
 export function Inventory() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [products, setProducts] = useState<InventoryItem[]>([]);
+  // activeTab replaces viewMode. 'inventory' = Grid, 'history' = Table
+  const [activeTab, setActiveTab] = useState<'inventory' | 'history'>('inventory');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Edit State
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<InventoryItem>>({});
 
   useEffect(() => {
-    const productsRef = ref(database, 'inventory');
+    const productsRef = ref(database, 'Inventory');
     const unsubscribe = onValue(productsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        setProducts(Object.values(data));
+        const loadedProducts: InventoryItem[] = Object.entries(data).map(([key, value]: [string, any]) => {
+          // Image Logic
+          let image = '/inventory/default.png'; // Fallback
+          const lowerName = (value.Name || key).toLowerCase();
+
+          if (lowerName.includes('green') && lowerName.includes('mang')) {
+            image = '/inventory/green-mango.png';
+          } else if (lowerName.includes('yellow') && lowerName.includes('mang')) {
+            image = '/inventory/yellow-mango.png';
+          } else if (lowerName.includes('rotten') && lowerName.includes('mang')) {
+            image = '/inventory/rotten-mango.png';
+          }
+
+          // Status Logic
+          const qty = Number(value.Quantity || 0);
+          const threshold = Number(value.Threshold || 5);
+          let status: InventoryItem['status'] = 'In Stock';
+          if (qty === 0) status = 'Out of Stock';
+          else if (qty <= threshold) status = 'Low Stock';
+
+          return {
+            id: key,
+            name: value.Name || key,
+            sku: value.ObjectID || 'N/A',
+            quantity: qty,
+            price: Number(value['Unit Price'] || 0),
+            threshold: threshold,
+            time_restock: value.Time_restock,
+            category: 'Produce',
+            image: image,
+            status: status
+          };
+        });
+        setProducts(loadedProducts);
+      } else {
+        setProducts([]);
       }
     });
+
     return () => unsubscribe();
   }, []);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [currentPage, setCurrentPage] = useState(1);
 
   // Filter products
   const filteredProducts = products.filter(product => {
@@ -49,8 +105,7 @@ export function Inventory() {
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'All' || product.category === categoryFilter;
-    const matchesStatus = statusFilter === 'All' || product.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory;
   });
 
   // Pagination
@@ -58,6 +113,52 @@ export function Inventory() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentProducts = filteredProducts.slice(startIndex, endIndex);
+
+  // Actions
+  const startEdit = (product: InventoryItem) => {
+    setEditingId(product.id);
+    setEditForm({ ...product });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    try {
+      const itemRef = ref(database, `Inventory/${editingId}`);
+      await update(itemRef, {
+        Name: editForm.name,
+        ObjectID: editForm.sku,
+        Quantity: Number(editForm.quantity),
+        "Unit Price": Number(editForm.price),
+        Threshold: Number(editForm.threshold) // Ensure valid number
+      });
+      setEditingId(null);
+      setEditForm({});
+    } catch (error) {
+      console.error("Error updating product:", error);
+      alert("Failed to update product");
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete ${name}?`)) {
+      try {
+        const itemRef = ref(database, `Inventory/${id}`);
+        await remove(itemRef);
+      } catch (error) {
+        console.error("Error deleting product:", error);
+        alert("Failed to delete product");
+      }
+    }
+  };
+
+  const handleAddNew = async () => {
+    alert("To add a new product, I would need a form. For now, try editing existing ones!");
+  };
 
   return (
     <div className="space-y-6">
@@ -69,7 +170,9 @@ export function Inventory() {
             Manage your products and stock levels
           </p>
         </div>
-        <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
+        <button
+          onClick={handleAddNew}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
                          flex items-center gap-2 transition-colors">
           <Plus className="w-4 h-4" />
           Add New Product
@@ -78,14 +181,36 @@ export function Inventory() {
 
       {/* Filters and Search */}
       <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800 space-y-4">
-        {/* Search Bar */}
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
+
+          {/* Tabs */}
+          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            <button
+              onClick={() => { setActiveTab('inventory'); setCurrentPage(1); }}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'inventory'
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+            >
+              Inventory
+            </button>
+            <button
+              onClick={() => { setActiveTab('history'); setCurrentPage(1); }}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'history'
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+            >
+              Inventory History
+            </button>
+          </div>
+
+          <div className="flex-1 max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search products by name or SKU..."
+                placeholder="Search products..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -99,74 +224,12 @@ export function Inventory() {
             </div>
           </div>
 
-          {/* View Toggle */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-            >
-              <Grid3x3 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-            >
-              <List className="w-5 h-5" />
-            </button>
-          </div>
-
           <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 
                            dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg 
                            flex items-center gap-2 transition-colors">
             <Download className="w-4 h-4" />
             Export
           </button>
-        </div>
-
-        {/* Filter Chips */}
-        <div className="flex flex-wrap gap-3">
-          <div className="flex gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">Category:</span>
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => {
-                  setCategoryFilter(cat);
-                  setCurrentPage(1);
-                }}
-                className={`px-3 py-1 rounded-lg text-sm transition-colors ${categoryFilter === cat
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">Status:</span>
-            {statuses.map(status => (
-              <button
-                key={status}
-                onClick={() => {
-                  setStatusFilter(status);
-                  setCurrentPage(1);
-                }}
-                className={`px-3 py-1 rounded-lg text-sm transition-colors ${statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -175,77 +238,128 @@ export function Inventory() {
         Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
       </div>
 
-      {/* Product Grid/List */}
-      {viewMode === 'grid' ? (
+      {/* Product Content */}
+      {activeTab === 'inventory' ? (
+        // === GRID VIEW (Inventory Tab) ===
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {currentProducts.map(product => (
-            <div
-              key={product.id}
-              className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 
+          {currentProducts.map(product => {
+            const isEditing = editingId === product.id;
+            return (
+              <div
+                key={product.id}
+                className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 
                        dark:border-gray-800 overflow-hidden hover:shadow-lg transition-all duration-200 
-                       group"
-            >
-              <div className="aspect-square bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                />
-              </div>
-              <div className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{product.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{product.sku}</p>
-                  </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[product.status as keyof typeof statusColors]}`}>
-                    {product.status}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm mb-3">
-                  <span className="text-gray-600 dark:text-gray-400">{product.category}</span>
-                  <span className="text-gray-900 dark:text-white font-semibold">
-                    Stock: {product.stock}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-800">
-                  <span className="text-lg font-bold text-gray-900 dark:text-white">
-                    ${product.price}
-                  </span>
-                  <div className="flex gap-2">
-                    <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
-                                     text-gray-600 dark:text-gray-400 transition-colors">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
-                                     text-red-600 dark:text-red-400 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                       group flex flex-col"
+              >
+                <div className="aspect-square bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-200"
+                  />
+                  <div className="absolute top-2 right-2">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[product.status]}`}>
+                      {product.status}
+                    </span>
                   </div>
                 </div>
+
+                <div className="p-4 flex-1 flex flex-col">
+                  {isEditing ? (
+                    <div className="space-y-2 flex-1">
+                      <input
+                        className="w-full p-1 border rounded text-sm mb-1"
+                        value={editForm.name}
+                        onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                        placeholder="Name"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          className="w-1/2 p-1 border rounded text-sm"
+                          value={editForm.sku}
+                          onChange={e => setEditForm({ ...editForm, sku: e.target.value })}
+                          placeholder="Object ID"
+                        />
+                        <input
+                          className="w-1/2 p-1 border rounded text-sm"
+                          type="number"
+                          value={editForm.quantity}
+                          onChange={e => setEditForm({ ...editForm, quantity: Number(e.target.value) })}
+                          placeholder="Qty"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          className="w-1/2 p-1 border rounded text-sm"
+                          type="number"
+                          value={editForm.price}
+                          onChange={e => setEditForm({ ...editForm, price: Number(e.target.value) })}
+                          placeholder="Unit Price"
+                        />
+                        <input
+                          className="w-1/2 p-1 border rounded text-sm"
+                          type="number"
+                          value={editForm.threshold}
+                          onChange={e => setEditForm({ ...editForm, threshold: Number(e.target.value) })}
+                          placeholder="Threshold"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 mt-4">
+                        <button onClick={saveEdit} className="p-2 text-green-600 hover:bg-green-50 rounded"><Save className="w-4 h-4" /></button>
+                        <button onClick={cancelEdit} className="p-2 text-gray-500 hover:bg-gray-50 rounded"><X className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={product.name}>{product.name}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">ObjectID: {product.sku}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-sm mb-3">
+                        <span className="text-gray-600 dark:text-gray-400">Qty: {product.quantity}</span>
+                        <span className="text-gray-500 text-xs">{product.time_restock?.split(' ')[0]}</span>
+                      </div>
+                      <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-800">
+                        <span className="text-lg font-bold text-gray-900 dark:text-white">
+                          ₱{product.price.toFixed(2)}
+                        </span>
+                        <div className="flex gap-2">
+                          <button onClick={() => startEdit(product)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
+                                            text-gray-600 dark:text-gray-400 transition-colors">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete(product.id, product.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
+                                            text-red-600 dark:text-red-400 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
+        // === LIST VIEW (History Tab) ===
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Product
+                  Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  SKU
+                  ObjectID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Category
+                  Quantity
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Stock
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Price
+                  Unit Price
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
@@ -256,51 +370,90 @@ export function Inventory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {currentProducts.map(product => (
-                <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-12 h-12 rounded-lg object-cover"
-                      />
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {product.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-mono">
-                    {product.sku}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                    {product.category}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                    {product.stock}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                    ${product.price}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[product.status as keyof typeof statusColors]}`}>
-                      {product.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex gap-2">
-                      <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
-                                       text-gray-600 dark:text-gray-400 transition-colors">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
-                                       text-red-600 dark:text-red-400 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {currentProducts.map(product => {
+                const isEditing = editingId === product.id;
+                return (
+                  <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    {isEditing ? (
+                      <>
+                        <td className="px-6 py-4">
+                          <input
+                            className="w-full p-1 border rounded"
+                            value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            className="w-20 p-1 border rounded"
+                            value={editForm.sku}
+                            onChange={e => setEditForm({ ...editForm, sku: e.target.value })}
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            className="w-20 p-1 border rounded"
+                            type="number"
+                            value={editForm.quantity}
+                            onChange={e => setEditForm({ ...editForm, quantity: Number(e.target.value) })}
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            className="w-20 p-1 border rounded"
+                            type="number"
+                            value={editForm.price}
+                            onChange={e => setEditForm({ ...editForm, price: Number(e.target.value) })}
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          Updating...
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <button onClick={saveEdit} className="text-green-600 hover:bg-green-50 p-1 rounded"><Save className="w-4 h-4" /></button>
+                            <button onClick={cancelEdit} className="text-gray-500 hover:bg-gray-50 p-1 rounded"><X className="w-4 h-4" /></button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            {product.name}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-mono">
+                          {product.sku}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                          {product.quantity}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                          ₱{product.price.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[product.status]}`}>
+                            {product.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex gap-2">
+                            <button onClick={() => startEdit(product)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
+                                            text-gray-600 dark:text-gray-400 transition-colors">
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDelete(product.id, product.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
+                                            text-red-600 dark:text-red-400 transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -328,8 +481,8 @@ export function Inventory() {
                 key={page}
                 onClick={() => setCurrentPage(page)}
                 className={`px-3 py-1 rounded-lg transition-colors ${currentPage === page
-                    ? 'bg-blue-600 text-white'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  ? 'bg-blue-600 text-white'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                   }`}
               >
                 {page}
