@@ -42,7 +42,19 @@ type UserData = {
   password?: string;
 };
 
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+
 export function Admin() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.role !== 'Admin') {
+      navigate('/');
+    }
+  }, [user, navigate]);
+
   const [activeTab, setActiveTab] = useState<'users' | 'create_account'>('users');
   const [showApiKey, setShowApiKey] = useState<number | null>(null);
 

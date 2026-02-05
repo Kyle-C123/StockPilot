@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Download,
   CheckCircle,
-  XCircle,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -13,6 +12,8 @@ import {
 } from 'lucide-react';
 import { ref, onValue, remove, update } from 'firebase/database';
 import { database } from '../../lib/firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -28,6 +29,8 @@ type AttendanceRecord = {
 };
 
 export function LoginHistory() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [loginData, setLoginData] = useState<AttendanceRecord[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
@@ -38,6 +41,10 @@ export function LoginHistory() {
   const [editForm, setEditForm] = useState<Partial<AttendanceRecord>>({});
 
   useEffect(() => {
+    if (user?.role === 'User') {
+      navigate('/');
+      return;
+    }
     const loginHistoryRef = ref(database, 'Attendance');
     const unsubscribe = onValue(loginHistoryRef, (snapshot) => {
       const data = snapshot.val();
@@ -154,8 +161,8 @@ export function LoginHistory() {
             <button
               onClick={() => { setActiveTab('today'); setCurrentPage(1); }}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'today'
-                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
             >
               Today's Login
@@ -163,8 +170,8 @@ export function LoginHistory() {
             <button
               onClick={() => { setActiveTab('history'); setCurrentPage(1); }}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'history'
-                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
             >
               Login History
@@ -226,7 +233,9 @@ export function LoginHistory() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time In</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time Out</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                {user?.role === 'Admin' && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -319,24 +328,26 @@ export function LoginHistory() {
                             <span className="text-sm font-medium text-green-700 dark:text-green-300">Success</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => startEdit(item)}
-                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item)}
-                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
+                        {user?.role === 'Admin' && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => startEdit(item)}
+                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(item)}
+                                className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </>
                     )}
                   </tr>

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ref, onValue, update, remove, push } from 'firebase/database';
 import { database } from '../../lib/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 const ITEMS_PER_PAGE = 6;
 
@@ -35,6 +36,7 @@ const statusColors = {
 };
 
 export function Inventory() {
+  const { user } = useAuth();
   const [products, setProducts] = useState<InventoryItem[]>([]);
   // activeTab replaces viewMode. 'inventory' = Grid, 'history' = Table
   const [activeTab, setActiveTab] = useState<'inventory' | 'history'>('inventory');
@@ -167,17 +169,6 @@ export function Inventory() {
     }
   };
 
-  const handleAddNew = () => {
-    setIsAddingNew(true);
-    setNewProductForm({
-      name: '',
-      sku: '',
-      quantity: 0,
-      price: 0,
-      threshold: 10
-    });
-  };
-
   const handleSaveNew = async () => {
     if (!newProductForm.name || !newProductForm.sku) {
       alert("Name and Object ID are required");
@@ -219,13 +210,16 @@ export function Inventory() {
             Manage your products and stock levels
           </p>
         </div>
-        <button
-          onClick={handleAddNew}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
-                         flex items-center gap-2 transition-colors">
-          <Plus className="w-4 h-4" />
-          Add New Product
-        </button>
+        {!['User'].includes(user?.role || '') && (
+          <button
+            onClick={() => setIsAddingNew(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
+                            flex items-center gap-2 transition-colors shadow-lg shadow-blue-500/20"
+          >
+            <Plus className="w-4 h-4" />
+            Add Product
+          </button>
+        )}
       </div>
 
       {/* Filters and Search */}
@@ -374,16 +368,18 @@ export function Inventory() {
                         <span className="text-lg font-bold text-gray-900 dark:text-white">
                           ₱{product.price.toFixed(2)}
                         </span>
-                        <div className="flex gap-2">
-                          <button onClick={() => startEdit(product)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
+                        {!['User'].includes(user?.role || '') && (
+                          <div className="flex gap-2">
+                            <button onClick={() => startEdit(product)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
                                             text-gray-600 dark:text-gray-400 transition-colors">
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => handleDelete(product.id, product.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDelete(product.id, product.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
                                             text-red-600 dark:text-red-400 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -413,9 +409,11 @@ export function Inventory() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
+                {user?.role !== 'User' && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -486,18 +484,24 @@ export function Inventory() {
                             {product.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex gap-2">
-                            <button onClick={() => startEdit(product)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 
-                                            text-gray-600 dark:text-gray-400 transition-colors">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleDelete(product.id, product.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 
-                                            text-red-600 dark:text-red-400 transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
+                        {user?.role !== 'User' && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => startEdit(product)}
+                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(product.id, product.name)}
+                                className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </>
                     )}
                   </tr>

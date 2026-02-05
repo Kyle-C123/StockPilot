@@ -73,7 +73,15 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
-          {menuItems.map((item) => {
+          {menuItems.filter(item => {
+            if (user?.role === 'User') {
+              return item.label !== 'Admin' && item.label !== 'Login History';
+            }
+            if (user?.role === 'Manager') {
+              return item.label !== 'Admin';
+            }
+            return true;
+          }).map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
 
