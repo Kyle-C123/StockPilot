@@ -8,7 +8,9 @@ import {
   Menu,
   X,
   User,
-  LogOut
+  LogOut,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,7 +23,12 @@ const menuItems = [
   { path: '/admin', label: 'Admin', icon: Shield },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isCollapsed: boolean;
+  onToggle: () => void;
+}
+
+export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { user, logout } = useAuth();
@@ -52,27 +59,37 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full w-64 bg-white dark:bg-gray-900 
+          fixed top-0 left-0 h-full bg-white dark:bg-gray-900 
           border-r border-gray-200 dark:border-gray-800
-          flex flex-col z-40 transition-transform duration-300
-          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          flex flex-col z-40 transition-all duration-300
+          ${isMobileOpen ? 'translate-x-0 w-64' : `-translate-x-full lg:translate-x-0 ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}`}
         `}
       >
+        {/* Toggle Button (Desktop only) */}
+        <button
+          onClick={onToggle}
+          className="hidden lg:flex absolute -right-3 top-9 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-full p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shadow-sm z-50 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+
         {/* Logo */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-800">
+        <div className={`p-6 border-b border-gray-200 dark:border-gray-800 ${isCollapsed ? 'px-4 flex justify-center' : ''}`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center flex-shrink-0">
               <Package className="w-6 h-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">StockPilot</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Pro Dashboard</p>
-            </div>
+            {!isCollapsed && (
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold text-gray-900 dark:text-white truncate">StockPilot</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Pro Dashboard</p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">
           {menuItems.filter(item => {
             if (user?.role === 'User') {
               return item.label !== 'Admin' && item.label !== 'Login History';
@@ -91,17 +108,19 @@ export function Sidebar() {
                 to={item.path}
                 onClick={() => setIsMobileOpen(false)}
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-lg
-                  transition-all duration-200 group
+                  flex items-center gap-3 px-4 py-3 rounded-lg group
+                  transition-all duration-200 relative
                   ${active
                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }
+                  ${isCollapsed ? 'justify-center px-2' : ''}
                 `}
+                title={isCollapsed ? item.label : undefined}
               >
-                <Icon className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                <span className="font-medium">{item.label}</span>
-                {active && (
+                <Icon className={`w-5 h-5 flex-shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+                {!isCollapsed && <span className="font-medium whitespace-nowrap">{item.label}</span>}
+                {!isCollapsed && active && (
                   <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
                 )}
               </Link>
@@ -110,20 +129,22 @@ export function Sidebar() {
         </nav>
 
         {/* User Profile */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+        <div className={`p-4 border-t border-gray-200 dark:border-gray-800 ${isCollapsed ? 'px-2' : ''}`}>
+          <div className={`flex items-center gap-2 ${isCollapsed ? 'flex-col' : ''}`}>
+            <div className={`flex-1 flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer ${isCollapsed ? 'justify-center px-0 w-full' : ''}`}>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
                 <User className="w-5 h-5 text-white" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.name || 'User'}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.role || 'Guest'}</p>
-              </div>
+              {!isCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.name || 'User'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.role || 'Guest'}</p>
+                </div>
+              )}
             </div>
             <button
               onClick={logout}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
               title="Logout"
             >
               <LogOut className="w-5 h-5" />
