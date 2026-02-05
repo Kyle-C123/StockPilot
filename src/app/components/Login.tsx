@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import { ref, get, child } from 'firebase/database';
+import { database } from '../../lib/firebase';
 
 export function Login() {
   const [username, setUsername] = useState('');
@@ -17,23 +19,50 @@ export function Login() {
     setError('');
     setIsLoading(true);
 
-    // Simulate login delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const dbRef = ref(database);
+      const snapshot = await get(child(dbRef, 'accounts'));
 
-    // Check credentials
-    if (username === 'admin' && password === 'admin') {
-      login({
-        id: '1',
-        name: 'Admin User',
-        email: 'admin@inventrack.com',
-        role: 'Admin',
-      });
-      navigate('/');
-    } else {
-      setError('Invalid username or password');
+      if (snapshot.exists()) {
+        const accounts = snapshot.val();
+        let userFound = false;
+
+        // Iterate through accounts to find match
+        for (const key in accounts) {
+          const account = accounts[key];
+          if (account.username === username && account.password === password) {
+            // Check if account is active
+            if (account.status === 'Inactive') {
+              setError('Account is inactive. Please contact admin.');
+              setIsLoading(false);
+              return;
+            }
+
+            userFound = true;
+            login({
+              id: key,
+              name: account.username, // Using username as name, or account.name if you add that field later
+              email: account.email || '',
+              role: account.role || 'User',
+            });
+            navigate('/');
+            break;
+          }
+        }
+
+        if (!userFound) {
+          setError('Invalid username or password');
+        }
+
+      } else {
+        setError('No accounts found in system.');
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError('Failed to connect to server.');
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -168,26 +197,11 @@ export function Login() {
             </button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
-            <p className="text-xs text-center text-gray-600 dark:text-gray-400 mb-2">
-              Demo Credentials:
-            </p>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
-              <p className="text-sm font-mono text-gray-900 dark:text-white">
-                Username: <span className="font-bold">admin</span>
-              </p>
-              <p className="text-sm font-mono text-gray-900 dark:text-white">
-                Password: <span className="font-bold">admin</span>
-              </p>
-            </div>
-          </div>
+          {/* Footer */}
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
+            © 2026 InvenTrack. All rights reserved.
+          </p>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
-          © 2026 InvenTrack. All rights reserved.
-        </p>
       </div>
     </div>
   );

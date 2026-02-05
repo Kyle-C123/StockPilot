@@ -22,7 +22,7 @@ const menuItems = [
 export function Sidebar() {
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -63,7 +63,7 @@ export function Sidebar() {
               <Package className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">InvenTrack</h1>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">StockPilot</h1>
               <p className="text-xs text-gray-500 dark:text-gray-400">Pro Dashboard</p>
             </div>
           </div>
@@ -107,8 +107,8 @@ export function Sidebar() {
                 <User className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">John Doe</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Admin</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.name || 'User'}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.role || 'Guest'}</p>
               </div>
             </div>
             <button
