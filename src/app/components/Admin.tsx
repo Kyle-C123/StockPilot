@@ -39,11 +39,15 @@ type UserData = {
   role: 'Admin' | 'Manager' | 'User';
   status: 'Active' | 'Inactive';
   lastActive: string;
+  password?: string;
 };
 
 export function Admin() {
   const [activeTab, setActiveTab] = useState<'users' | 'create_account'>('users');
   const [showApiKey, setShowApiKey] = useState<number | null>(null);
+
+  // State for toggling password visibility in table
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
 
   const [users, setUsers] = useState<UserData[]>([]);
 
@@ -69,7 +73,8 @@ export function Admin() {
           email: value.email || '',
           role: value.role || 'User',
           status: value.status || 'Active',
-          lastActive: value.lastActive || 'Never'
+          lastActive: value.lastActive || 'Never',
+          password: value.password || ''
         }));
         setUsers(loadedUsers);
       } else {
@@ -125,7 +130,8 @@ export function Admin() {
         username: editForm.name,
         email: editForm.email,
         role: editForm.role,
-        status: editForm.status
+        status: editForm.status,
+        password: editForm.password
       });
       setEditingId(null);
       setEditForm({});
@@ -229,6 +235,9 @@ export function Admin() {
                         Last Active
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Password
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
@@ -236,6 +245,7 @@ export function Admin() {
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {users.map(user => {
                       const isEditing = editingId === user.id;
+                      const isPasswordVisible = visiblePasswords[user.id];
                       return (
                         <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                           {isEditing ? (
@@ -278,6 +288,16 @@ export function Admin() {
                               <td className="px-4 py-4 text-sm text-gray-500">
                                 Updating...
                               </td>
+                              {/* Edit Password Field */}
+                              <td className="px-4 py-4">
+                                <input
+                                  type="text"
+                                  className="w-full p-1 border rounded text-sm"
+                                  value={editForm.password || ''}
+                                  onChange={e => setEditForm({ ...editForm, password: e.target.value })}
+                                  placeholder="New Password"
+                                />
+                              </td>
                               <td className="px-4 py-4">
                                 <div className="flex gap-2">
                                   <button onClick={saveEdit} className="p-2 text-green-600 hover:bg-green-50 rounded"><Save className="w-4 h-4" /></button>
@@ -305,6 +325,19 @@ export function Admin() {
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
                                 {user.lastActive}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono">
+                                    {isPasswordVisible ? user.password : '••••••••'}
+                                  </span>
+                                  <button
+                                    onClick={() => setVisiblePasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
+                                  >
+                                    {isPasswordVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                </div>
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap">
                                 <div className="flex gap-2">
