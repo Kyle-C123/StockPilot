@@ -1,6 +1,6 @@
 import { Bell, Search, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -12,6 +12,25 @@ export function Header() {
     { id: 3, text: 'User logged in from new device', time: '1 hour ago', unread: false },
   ];
 
+
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDate(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  // Filter unread notifications
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
@@ -33,8 +52,20 @@ export function Header() {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 ml-4">
+        {/* Clock & Actions */}
+        <div className="flex items-center gap-4 ml-4">
+          {/* Digital Clock */}
+          <div className="hidden md:flex flex-col items-end mr-2">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+              {formatDate(currentDate)}
+            </span>
+            <span className="text-xl font-bold text-gray-900 dark:text-white font-mono leading-none">
+              {formatTime(currentDate)}
+            </span>
+          </div>
+
+          <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 mx-2 hidden md:block"></div>
+
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
