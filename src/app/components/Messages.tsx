@@ -13,7 +13,8 @@ import {
     File,
     X,
     Check,
-    Search
+    Search,
+    ChevronLeft
 } from 'lucide-react';
 
 type User = {

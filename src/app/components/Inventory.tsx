@@ -391,124 +391,126 @@ export function Inventory() {
       ) : (
         // === LIST VIEW (History Tab) ===
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-800/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  ObjectID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Quantity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Unit Price
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                {user?.role !== 'User' && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-800/50">
+                <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Actions
+                    Name
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {currentProducts.map(product => {
-                const isEditing = editingId === product.id;
-                return (
-                  <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    {isEditing ? (
-                      <>
-                        <td className="px-6 py-4">
-                          <input
-                            className="w-full p-1 border rounded"
-                            value={editForm.name}
-                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                          />
-                        </td>
-                        <td className="px-6 py-4">
-                          <input
-                            className="w-20 p-1 border rounded"
-                            value={editForm.sku}
-                            onChange={e => setEditForm({ ...editForm, sku: e.target.value })}
-                          />
-                        </td>
-                        <td className="px-6 py-4">
-                          <input
-                            className="w-20 p-1 border rounded"
-                            type="number"
-                            value={editForm.quantity}
-                            onChange={e => setEditForm({ ...editForm, quantity: Number(e.target.value) })}
-                          />
-                        </td>
-                        <td className="px-6 py-4">
-                          <input
-                            className="w-20 p-1 border rounded"
-                            type="number"
-                            value={editForm.price}
-                            onChange={e => setEditForm({ ...editForm, price: Number(e.target.value) })}
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          Updating...
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex gap-2">
-                            <button onClick={saveEdit} className="text-green-600 hover:bg-green-50 p-1 rounded"><Save className="w-4 h-4" /></button>
-                            <button onClick={cancelEdit} className="text-gray-500 hover:bg-gray-50 p-1 rounded"><X className="w-4 h-4" /></button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {product.name}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-mono">
-                          {product.sku}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                          {product.quantity}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                          ₱{product.price.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[product.status]}`}>
-                            {product.status}
-                          </span>
-                        </td>
-                        {user?.role !== 'User' && (
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => startEdit(product)}
-                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(product.id, product.name)}
-                                className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    ObjectID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Quantity
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Unit Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                  {user?.role !== 'User' && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                {currentProducts.map(product => {
+                  const isEditing = editingId === product.id;
+                  return (
+                    <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      {isEditing ? (
+                        <>
+                          <td className="px-6 py-4">
+                            <input
+                              className="w-full p-1 border rounded"
+                              value={editForm.name}
+                              onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <input
+                              className="w-20 p-1 border rounded"
+                              value={editForm.sku}
+                              onChange={e => setEditForm({ ...editForm, sku: e.target.value })}
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <input
+                              className="w-20 p-1 border rounded"
+                              type="number"
+                              value={editForm.quantity}
+                              onChange={e => setEditForm({ ...editForm, quantity: Number(e.target.value) })}
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <input
+                              className="w-20 p-1 border rounded"
+                              type="number"
+                              value={editForm.price}
+                              onChange={e => setEditForm({ ...editForm, price: Number(e.target.value) })}
+                            />
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            Updating...
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex gap-2">
+                              <button onClick={saveEdit} className="text-green-600 hover:bg-green-50 p-1 rounded"><Save className="w-4 h-4" /></button>
+                              <button onClick={cancelEdit} className="text-gray-500 hover:bg-gray-50 p-1 rounded"><X className="w-4 h-4" /></button>
                             </div>
                           </td>
-                        )}
-                      </>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {product.name}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-mono">
+                            {product.sku}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                            {product.quantity}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                            ₱{product.price.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[product.status]}`}>
+                              {product.status}
+                            </span>
+                          </td>
+                          {user?.role !== 'User' && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => startEdit(product)}
+                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(product.id, product.name)}
+                                  className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
