@@ -166,7 +166,7 @@ export function Login() {
             <Package className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome to InvenTrack
+            Welcome to Stock Pilot
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
             Sign in to access your dashboard
@@ -370,7 +370,7 @@ export function Login() {
 
           {/* Footer */}
           <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
-            © 2026 InvenTrack. All rights reserved.
+            © 2026 Stock Pilot. All rights reserved.
           </p>
         </div>
       </div>
