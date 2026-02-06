@@ -253,14 +253,14 @@ export function LoginHistory() {
                       <>
                         <td className="px-6 py-4">
                           <input
-                            className="w-full p-1 border rounded"
+                            className="w-full p-2 border rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                             value={editForm.Name || ''}
                             onChange={e => setEditForm({ ...editForm, Name: e.target.value })}
                           />
                         </td>
                         <td className="px-6 py-4">
                           <input
-                            className="w-full p-1 border rounded"
+                            className="w-full p-2 border rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                             value={editForm.RFID || ''}
                             onChange={e => setEditForm({ ...editForm, RFID: e.target.value })}
                           />
@@ -270,14 +270,14 @@ export function LoginHistory() {
                         </td>
                         <td className="px-6 py-4">
                           <input
-                            className="w-full p-1 border rounded"
+                            className="w-full p-2 border rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                             value={editForm.Time_in || ''}
                             onChange={e => setEditForm({ ...editForm, Time_in: e.target.value })}
                           />
                         </td>
                         <td className="px-6 py-4">
                           <input
-                            className="w-full p-1 border rounded"
+                            className="w-full p-2 border rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                             value={editForm.Time_out || ''}
                             onChange={e => setEditForm({ ...editForm, Time_out: e.target.value })}
                           />

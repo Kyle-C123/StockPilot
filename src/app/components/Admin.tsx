@@ -264,13 +264,13 @@ export function Admin() {
                             <>
                               <td className="px-4 py-4">
                                 <input
-                                  className="w-full p-1 border rounded text-sm mb-1"
+                                  className="w-full p-2 border rounded-lg text-sm mb-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                                   value={editForm.name}
                                   onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                                   placeholder="Username"
                                 />
                                 <input
-                                  className="w-full p-1 border rounded text-xs"
+                                  className="w-full p-2 border rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                                   value={editForm.email}
                                   onChange={e => setEditForm({ ...editForm, email: e.target.value })}
                                   placeholder="Email"
@@ -278,7 +278,7 @@ export function Admin() {
                               </td>
                               <td className="px-4 py-4">
                                 <select
-                                  className="p-1 border rounded text-sm"
+                                  className="p-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none w-full"
                                   value={editForm.role}
                                   onChange={e => setEditForm({ ...editForm, role: e.target.value as any })}
                                 >
@@ -289,7 +289,7 @@ export function Admin() {
                               </td>
                               <td className="px-4 py-4">
                                 <select
-                                  className="p-1 border rounded text-sm"
+                                  className="p-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none w-full"
                                   value={editForm.status}
                                   onChange={e => setEditForm({ ...editForm, status: e.target.value as any })}
                                 >
@@ -304,7 +304,7 @@ export function Admin() {
                               <td className="px-4 py-4">
                                 <input
                                   type="text"
-                                  className="w-full p-1 border rounded text-sm"
+                                  className="w-full p-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
                                   value={editForm.password || ''}
                                   onChange={e => setEditForm({ ...editForm, password: e.target.value })}
                                   placeholder="New Password"
