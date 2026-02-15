@@ -80,7 +80,13 @@ export function LoginHistory() {
   // Filter data
   const filteredData = loginData.filter(item => {
     // Tab Filter
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Use local time for comparison to match the user's perception of "Today"
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
     const matchesTab = activeTab === 'today' ? item.dateKey === todayStr : true;
 
     // Search Filter
