@@ -101,18 +101,27 @@ export function Dashboard() {
           }
 
           if (latestItem) {
+            // Prioritize root Threshold if available
+            const threshold = Number(productData.Threshold !== undefined ? productData.Threshold : (latestItem.Threshold || 5));
+
             items.push({
               Name: productName,
               Quantity: totalQty,
               'Unit Price': latestItem['Unit Price'],
-              Threshold: latestItem.Threshold
+              Threshold: threshold
             });
           }
         });
 
         // 1. Metrics Calculation
         const totalProducts = items.length;
-        const lowStockCount = items.filter((i: any) => Number(i.Quantity || 0) <= Number(i.Threshold || 5)).length;
+        const lowStockCount = items.filter((i: any) => {
+          // We need the Threshold from the item. If not present (should be), default to 5.
+          // In items array creation, we set Threshold from latestItem.Threshold
+          // WAIT. In items push above, we only set Threshold: latestItem.Threshold
+          // We need to FIX that push first.
+          return Number(i.Quantity || 0) <= Number(i.Threshold !== undefined ? i.Threshold : 5);
+        }).length;
         const totalValue = items.reduce((sum: number, i: any) => sum + (Number(i.Quantity || 0) * Number(i['Unit Price'] || 0)), 0);
 
         // 2. Chart Data (Current Stock Levels)

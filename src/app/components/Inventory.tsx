@@ -96,15 +96,22 @@ export function Inventory() {
           let latestItem: any = productData;
           let totalQty = Number(productData.Quantity || 0);
 
-          // Detect if batches exist (keys look like push IDs)
-          // Heuristic: Check if 'Quantity' exists on the root. If not, iterate children.
-          if (typeof productData === 'object' && !('Quantity' in productData)) {
-            // It's likely batches. Find the latest one.
+          // Detect if batches exist and populate history
+          if (typeof productData === 'object') {
+            // Initialize latestTimestamp with the root's timestamp if it exists, 
+            // so we only override if we find a NEWER batch.
             let latestTimestamp = 0;
+            if (productData.Time_restock) {
+              latestTimestamp = new Date(productData.Time_restock).getTime();
+            }
+
             let batchQty = 0;
+            let hasBatches = false;
 
             Object.entries(productData).forEach(([key, item]: [string, any]) => {
-              if (typeof item !== 'object') return;
+              if (typeof item !== 'object' || !item.Time_restock) return;
+
+              hasBatches = true;
 
               // Add to batch history
               batchHistory.push({
@@ -121,22 +128,20 @@ export function Inventory() {
                 parentId: productName
               });
 
-              // For quantity, we decided to use the LATEST batch's quantity as the "Current State"
-              // instead of summing, because the user said "Database says 4, Website says 10".
-              // This implies the database has a specific record they trust.
-
               const timestamp = item.Time_restock || '';
               const tsValue = new Date(timestamp).getTime();
 
-              // Track latest for metadata
               if (tsValue > latestTimestamp) {
                 latestItem = item;
                 latestTimestamp = tsValue;
-                // In this new logic, the LATEST batch defines the current quantity.
                 batchQty = Number(item.Quantity || 0);
               }
             });
-            totalQty = batchQty;
+
+            // Only overwrite totalQty if we don't have a root Quantity AND we found batches
+            if (!('Quantity' in productData) && hasBatches) {
+              totalQty = batchQty;
+            }
           }
 
           if (latestItem) {
@@ -152,7 +157,8 @@ export function Inventory() {
             }
 
             // Status Logic
-            const threshold = Number(latestItem.Threshold || 5);
+            // Prioritize Threshold from the product root (where edits are saved), fallback to latestItem, then default to 5.
+            const threshold = Number(productData.Threshold !== undefined ? productData.Threshold : (latestItem.Threshold || 5));
             let status: InventoryItem['status'] = 'In Stock';
             if (totalQty === 0) status = 'Out of Stock';
             else if (totalQty <= threshold) status = 'Low Stock';
@@ -801,8 +807,8 @@ export function Inventory() {
                     <div className="text-xs text-gray-400 mt-1">{log.timestamp}</div>
                   </div>
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${log.action === 'Restock' || log.action === 'Initial Stock' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' :
-                      log.action === 'Deduct' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                        'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                    log.action === 'Deduct' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
+                      'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
                     }`}>
                     {log.action}
                   </span>
@@ -814,7 +820,7 @@ export function Inventory() {
                     {log.source === 'batch' && <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded">Batch</span>}
                   </div>
                   <div className={`text-sm font-medium ${log.quantityChange > 0 ? 'text-green-600 dark:text-green-400' :
-                      log.quantityChange < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
+                    log.quantityChange < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
                     }`}>
                     {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}
                   </div>
