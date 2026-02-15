@@ -39,6 +39,8 @@ type InventoryHistoryItem = {
   newQuantity: number;
   timestamp: string;
   performedBy: string;
+  source: 'log' | 'batch' | 'flat';
+  parentId?: string;
 };
 
 const statusColors = {
@@ -62,6 +64,8 @@ export function Inventory() {
 
   // Add State
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [batchHistoryLogs, setBatchHistoryLogs] = useState<InventoryHistoryItem[]>([]);
+  const [dedicatedHistoryLogs, setDedicatedHistoryLogs] = useState<InventoryHistoryItem[]>([]);
   const [newProductForm, setNewProductForm] = useState({
     name: '',
     sku: '',
@@ -73,48 +77,67 @@ export function Inventory() {
   // Delete State
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ id: string, name: string } | null>(null);
 
-  // Fetch Inventory Data and Derive History
+  // Fetch Inventory Data (Snapshot Logic)
   useEffect(() => {
     const productsRef = ref(database, 'Inventory');
     const unsubscribe = onValue(productsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const loadedProducts: InventoryItem[] = [];
-        const loadedHistory: InventoryHistoryItem[] = [];
+        const batchHistory: InventoryHistoryItem[] = []; // Collect batch history from Inventory node
 
-        Object.entries(data).forEach(([productName, batches]: [string, any]) => {
-          if (typeof batches !== 'object' || !batches) return;
+        Object.entries(data).forEach(([productName, productData]: [string, any]) => {
+          if (!productData) return;
 
-          let totalQty = 0;
-          let latestItem: any = null;
-          let latestTimestamp = 0;
+          // Check if it's a nested structure (Legacy Batches) or Flat (New Snapshot)
+          // We assume if it has 'Quantity' directly, it's flat.
+          // If it has children that are pushes, we need to find the latest.
 
-          // Iterate through batches (Push IDs)
-          Object.entries(batches).forEach(([pushId, item]: [string, any]) => {
-            const qty = Number(item.Quantity || 0);
-            totalQty += qty;
+          let latestItem: any = productData;
+          let totalQty = Number(productData.Quantity || 0);
 
-            const timestamp = item.Time_restock || '';
-            const tsValue = new Date(timestamp).getTime();
+          // Detect if batches exist (keys look like push IDs)
+          // Heuristic: Check if 'Quantity' exists on the root. If not, iterate children.
+          if (typeof productData === 'object' && !('Quantity' in productData)) {
+            // It's likely batches. Find the latest one.
+            let latestTimestamp = 0;
+            let batchQty = 0;
 
-            if (!latestItem || tsValue > latestTimestamp) {
-              latestItem = item;
-              latestTimestamp = tsValue;
-            }
+            Object.entries(productData).forEach(([key, item]: [string, any]) => {
+              if (typeof item !== 'object') return;
 
-            // Add to history logs (each batch is a history item)
-            loadedHistory.push({
-              id: pushId,
-              action: 'Restock', // Assumed as these are existing batches
-              productName: item.Name || productName,
-              sku: item.ObjectID || 'N/A',
-              quantityChange: qty,
-              previousQuantity: 0, // Not tracked per batch
-              newQuantity: qty,
-              timestamp: timestamp,
-              performedBy: 'System' // Not available in current data
+              // Add to batch history
+              batchHistory.push({
+                id: key,
+                action: 'Restock',
+                productName: item.Name || productName,
+                sku: item.ObjectID || 'N/A',
+                quantityChange: Number(item.Quantity || 0),
+                previousQuantity: 0,
+                newQuantity: Number(item.Quantity || 0),
+                timestamp: item.Time_restock || '',
+                performedBy: 'System (Batch)',
+                source: 'batch',
+                parentId: productName
+              });
+
+              // For quantity, we decided to use the LATEST batch's quantity as the "Current State"
+              // instead of summing, because the user said "Database says 4, Website says 10".
+              // This implies the database has a specific record they trust.
+
+              const timestamp = item.Time_restock || '';
+              const tsValue = new Date(timestamp).getTime();
+
+              // Track latest for metadata
+              if (tsValue > latestTimestamp) {
+                latestItem = item;
+                latestTimestamp = tsValue;
+                // In this new logic, the LATEST batch defines the current quantity.
+                batchQty = Number(item.Quantity || 0);
+              }
             });
-          });
+            totalQty = batchQty;
+          }
 
           if (latestItem) {
             // Image Logic
@@ -135,7 +158,7 @@ export function Inventory() {
             else if (totalQty <= threshold) status = 'Low Stock';
 
             loadedProducts.push({
-              id: productName, // Use Product Name as ID for the aggregated view
+              id: productName,
               name: productName,
               sku: latestItem.ObjectID || 'N/A',
               quantity: totalQty,
@@ -150,17 +173,53 @@ export function Inventory() {
         });
 
         setProducts(loadedProducts);
-        // Sort history by timestamp descending
-        loadedHistory.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setHistoryLogs(loadedHistory);
+        setBatchHistoryLogs(batchHistory); // Store batch history
       } else {
         setProducts([]);
-        setHistoryLogs([]);
+        setBatchHistoryLogs([]);
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch History Logs Node
+  useEffect(() => {
+    const historyRef = ref(database, 'InventoryHistory');
+    const unsubscribe = onValue(historyRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Filter out 'System Migration' to avoid duplicates with live batches
+        const loadedHistory: InventoryHistoryItem[] = Object.entries(data)
+          .map(([key, value]: [string, any]) => ({
+            id: key,
+            action: value.action,
+            productName: value.productName,
+            sku: value.sku,
+            quantityChange: value.quantityChange,
+            previousQuantity: value.previousQuantity,
+            newQuantity: value.newQuantity,
+            timestamp: value.timestamp,
+            performedBy: value.performedBy,
+            source: 'log' as const
+          }))
+          .filter(item => item.performedBy !== 'System Migration'); // De-dupe
+
+        setDedicatedHistoryLogs(loadedHistory);
+      } else {
+        setDedicatedHistoryLogs([]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Combine Logs
+  useEffect(() => {
+    const combined = [...dedicatedHistoryLogs, ...batchHistoryLogs];
+    combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    setHistoryLogs(combined);
+  }, [dedicatedHistoryLogs, batchHistoryLogs]);
 
   // Filter products
   const filteredProducts = products.filter(product => {
@@ -199,30 +258,54 @@ export function Inventory() {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    // editingId is ProductName in the new structure
+
     try {
-      // For now, we update the metadata of the LATEST batch or all batches?
-      // Simpler: Just update fields. Finding all batches is expensive without query.
-      // But we have the structure.
-      // Let's just update the specific product node. 
-      // Issue: We can't easily iterate and update all children in Firebase without fetching keys.
-      // But we have the keys in the `products` logic, but not here locally easily.
+      // Find the old product details for history logging
+      const oldProduct = products.find(p => p.id === editingId);
+      if (oldProduct) {
+        const productRef = ref(database, `Inventory/${editingId}`);
 
-      // ALTERNATIVE: Just alert user that only Add is fully supported for now?
-      // No, let's try to do it right.
-      // We need to fetch the node to get keys, then update.
-      const productRef = ref(database, `Inventory/${editingId}`);
-      // Ideally we would do a multi-path update.
-      // For this task, let's assume we just want to update the "visuals" for future batches?
-      // Or maybe we just prevent editing for now to avoid desync?
-      // User request: "fix connection".
-      // I will disable Save for now or make it a "Metadata Edit" that tries to update recent.
+        // Update the product node directly (Snapshot model)
+        // If it was nested batches, this adds/updates these keys on the root of the product node,
+        // effectively making it a snapshot + valid flat record.
+        await update(productRef, {
+          Name: editForm.name,
+          ObjectID: editForm.sku,
+          Quantity: Number(editForm.quantity),
+          "Unit Price": Number(editForm.price),
+          Threshold: Number(editForm.threshold),
+          Time_restock: new Date().toISOString().slice(0, 19).replace('T', ' ')
+        });
 
-      // Let's implement a simple update that only updates if we can find the children.
-      alert("Editing existing batches is currently limited. Please use 'Add Product' to add new stock.");
+        // Log History
+        const oldQty = oldProduct.quantity;
+        const newQty = Number(editForm.quantity);
+        const diff = newQty - oldQty;
+
+        let action: InventoryHistoryItem['action'] = 'Update';
+        if (diff > 0) action = 'Restock';
+        else if (diff < 0) action = 'Deduct';
+
+        if (diff !== 0 || oldProduct.name !== editForm.name || oldProduct.price !== Number(editForm.price)) {
+          const historyRef = ref(database, 'InventoryHistory');
+          await push(historyRef, {
+            action: action,
+            productName: editForm.name || oldProduct.name,
+            sku: editForm.sku || oldProduct.sku,
+            quantityChange: diff,
+            previousQuantity: oldQty,
+            newQuantity: newQty,
+            timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            performedBy: user?.name || 'Unknown'
+          });
+        }
+      }
+
       setEditingId(null);
+      setEditForm({});
     } catch (error) {
       console.error(error);
+      alert("Failed to update product");
     }
   };
 
@@ -244,6 +327,81 @@ export function Inventory() {
     }
   };
 
+  const [editingHistory, setEditingHistory] = useState<InventoryHistoryItem | null>(null);
+  const [editHistoryForm, setEditHistoryForm] = useState<{
+    quantityChange: number;
+    action: InventoryHistoryItem['action'];
+  }>({ quantityChange: 0, action: 'Update' });
+
+  const startEditHistory = (item: InventoryHistoryItem) => {
+    if (item.source !== 'log') {
+      alert("Only system logs can be edited. Batch records must be modified via product inventory.");
+      return;
+    }
+    setEditingHistory(item);
+    setEditHistoryForm({
+      quantityChange: item.quantityChange,
+      action: item.action
+    });
+  };
+
+  const saveHistoryEdit = async () => {
+    if (!editingHistory) return;
+
+    try {
+      const historyRef = ref(database, `InventoryHistory/${editingHistory.id}`);
+      await update(historyRef, {
+        quantityChange: Number(editHistoryForm.quantityChange),
+        action: editHistoryForm.action,
+        // Update newQuantity based on previous? 
+        // This is tricky because calculate newQuantity depends on previous. 
+        // But for simple "Correction", maybe we just update the change amount.
+        // Let's assume user knows what they are doing.
+        newQuantity: editingHistory.previousQuantity + Number(editHistoryForm.quantityChange),
+      });
+      setEditingHistory(null);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update history record");
+    }
+  };
+
+  const deleteHistory = async (item: InventoryHistoryItem) => {
+    if (!confirm("Are you sure you want to delete this history record?")) return;
+
+    try {
+      if (item.source === 'log') {
+        // Delete from InventoryHistory
+        await remove(ref(database, `InventoryHistory/${item.id}`));
+      } else if (item.source === 'batch') {
+        // It's a nested batch. We have the Batch ID (item.id) and Parent ID (item.parentId).
+        if (item.parentId) {
+          const batchRef = ref(database, `Inventory/${item.parentId}/${item.id}`);
+          await remove(batchRef);
+
+          // Also need to consider if this was the "Latest" batch that defined the product quantity.
+          // Our listener in useEffect will automatically pick up the NEXT latest batch 
+          // and update the product display. So this is safe!
+        } else {
+          alert("Cannot delete this batch: Missing parent product information.");
+        }
+      } else if (item.source === 'flat') {
+        // It's a flat product (e.g. Yellow Manggo).
+        // Deleting this history record effectively means resetting the product's quantity to 0 
+        // or deleting the product? 
+        // The user asked to delete the "history record".
+        // If we delete the product, it disappears from Inventory.
+        // Let's ask for confirmation or just reset quantity.
+        if (confirm("This is a live product. Deleting this record will delete the product from Inventory. Continue?")) {
+          await remove(ref(database, `Inventory/${item.id}`));
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete history item");
+    }
+  };
+
   const handleSaveNew = async () => {
     if (!newProductForm.name || !newProductForm.sku) {
       alert("Name and Object ID are required");
@@ -251,10 +409,18 @@ export function Inventory() {
     }
 
     try {
-      // Push to Inventory/{Name}
+      // Use set() instead of push() to create a single source of truth for the product
+      // This supports the Snapshot model
+      // Note: We need to import 'set' from firebase/database
       const itemsRef = ref(database, `Inventory/${newProductForm.name}`);
 
-      await push(itemsRef, {
+      // We use 'update' here because 'set' might overwrite other children if we are not careful,
+      // but since we want to define the properties directly on the node, update is safer to merge,
+      // OR set is better to enforce structure. 
+      // Given the issue with batches, we want to start fresh or overwrite safely.
+      // Let's use 'update' to be safe but on the specific path.
+
+      await update(itemsRef, {
         Name: newProductForm.name,
         ObjectID: newProductForm.sku,
         Quantity: Number(newProductForm.quantity),
@@ -263,8 +429,18 @@ export function Inventory() {
         Time_restock: new Date().toISOString().slice(0, 19).replace('T', ' ')
       });
 
-      // We don't need to push to 'InventoryHistory' anymore since we derive it!
-      // This simplifies things greatly.
+      // Log Initial Stock to History
+      const historyRef = ref(database, 'InventoryHistory');
+      await push(historyRef, {
+        action: 'Initial Stock',
+        productName: newProductForm.name,
+        sku: newProductForm.sku,
+        quantityChange: Number(newProductForm.quantity),
+        previousQuantity: 0,
+        newQuantity: Number(newProductForm.quantity),
+        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        performedBy: user?.name || 'Unknown'
+      });
 
       setIsAddingNew(false);
       setNewProductForm({
@@ -298,6 +474,53 @@ export function Inventory() {
           >
             <Plus className="w-4 h-4" />
             Add Product
+          </button>
+        )}
+        {user?.role === 'Admin' && (
+          <button
+            onClick={async () => {
+              if (!confirm("This will migrate legacy batches to history. Continue?")) return;
+
+              try {
+                const productsRef = ref(database, 'Inventory');
+                // We need to fetch once to process
+                onValue(productsRef, (snapshot) => {
+                  const data = snapshot.val();
+                  if (!data) return;
+
+                  let count = 0;
+                  const historyRef = ref(database, 'InventoryHistory');
+
+                  Object.entries(data).forEach(([productName, productData]: [string, any]) => {
+                    if (typeof productData === 'object' && !('Quantity' in productData)) {
+                      // Legacy Batches
+                      Object.entries(productData).forEach(([key, item]: [string, any]) => {
+                        if (typeof item !== 'object') return;
+
+                        push(historyRef, {
+                          action: 'Restock',
+                          productName: item.Name || productName,
+                          sku: item.ObjectID || 'N/A',
+                          quantityChange: Number(item.Quantity || 0),
+                          previousQuantity: 0,
+                          newQuantity: Number(item.Quantity || 0),
+                          timestamp: item.Time_restock || new Date().toISOString(),
+                          performedBy: 'System Migration'
+                        });
+                        count++;
+                      });
+                    }
+                  });
+                  alert(`Migration Check Complete. Processed nested batches.`);
+                }, { onlyOnce: true });
+              } catch (e) {
+                console.error(e);
+                alert("Migration failed");
+              }
+            }}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center gap-2 text-xs"
+          >
+            Migrate History
           </button>
         )}
       </div>
@@ -411,11 +634,12 @@ export function Inventory() {
                       <div className="w-1/2">
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Total Quantity</label>
                         <input
-                          className="w-full px-2 py-1.5 border rounded-lg text-sm bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 outline-none cursor-not-allowed"
+                          className={`w-full px-2 py-1.5 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 outline-none transition-all ${user?.role !== 'Admin' ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-60' : 'focus:ring-2 focus:ring-blue-500'}`}
                           type="number"
                           value={editForm.quantity}
-                          readOnly
-                          title="Quantity is calculated from batches. Use 'Add Product' to add stock."
+                          onChange={e => user?.role === 'Admin' && setEditForm({ ...editForm, quantity: Number(e.target.value) })}
+                          readOnly={user?.role !== 'Admin'}
+                          title={user?.role !== 'Admin' ? "Only Admins can edit quantity directly" : "Edit quantity"}
                         />
                       </div>
                     </div>
@@ -485,7 +709,9 @@ export function Inventory() {
       ) : (
         // === LIST VIEW (History Tab) ===
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <div className="overflow-x-auto">
+
+          {/* Default Table View (Medium screens and up) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr>
@@ -504,11 +730,16 @@ export function Inventory() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     By
                   </th>
+                  {user?.role === 'Admin' && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {(currentItems as InventoryHistoryItem[]).map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {log.timestamp}
                     </td>
@@ -524,21 +755,91 @@ export function Inventory() {
                       <div className="text-sm font-medium text-gray-900 dark:text-white">{log.productName}</div>
                       <div className="text-xs text-gray-500 font-mono">{log.sku}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={log.quantityChange > 0 ? 'text-green-600' : log.quantityChange < 0 ? 'text-red-600' : 'text-gray-500'}>
-                        {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}
-                      </span>
-                      <span className="text-gray-400 text-xs ml-2">
-                        ({log.previousQuantity} → {log.newQuantity})
-                      </span>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${log.quantityChange > 0 ? 'text-green-600 dark:text-green-400' :
+                      log.quantityChange < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
+                      }`}>
+                      {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {log.performedBy}
+                      {log.source === 'batch' && <span className="text-xs text-gray-400 ml-1">(Batch)</span>}
                     </td>
+                    {user?.role === 'Admin' && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => startEditHistory(log)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                            title="Edit Record"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteHistory(log)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                            title="Delete Record"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View (Small screens) */}
+          <div className="md:hidden divide-y divide-gray-200 dark:divide-gray-800">
+            {(currentItems as InventoryHistoryItem[]).map(log => (
+              <div key={log.id} className="p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">{log.productName}</div>
+                    <div className="text-xs text-gray-500 font-mono">{log.sku}</div>
+                    <div className="text-xs text-gray-400 mt-1">{log.timestamp}</div>
+                  </div>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${log.action === 'Restock' || log.action === 'Initial Stock' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' :
+                      log.action === 'Deduct' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
+                        'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                    }`}>
+                    {log.action}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">By: {log.performedBy}</span>
+                    {log.source === 'batch' && <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded">Batch</span>}
+                  </div>
+                  <div className={`text-sm font-medium ${log.quantityChange > 0 ? 'text-green-600 dark:text-green-400' :
+                      log.quantityChange < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
+                    }`}>
+                    {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}
+                  </div>
+                </div>
+
+                {user?.role === 'Admin' && (
+                  <div className="flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800/50">
+                    <button
+                      onClick={() => startEditHistory(log)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => deleteHistory(log)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )

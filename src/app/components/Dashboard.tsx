@@ -73,7 +73,42 @@ export function Dashboard() {
     const unsubscribeInventory = onValue(inventoryRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const items = Object.values(data) as any[];
+        const items: any[] = [];
+
+        Object.entries(data).forEach(([productName, productData]: [string, any]) => {
+          if (!productData) return;
+
+          let latestItem: any = productData;
+          let totalQty = Number(productData.Quantity || 0);
+
+          // Check for nested batches
+          if (typeof productData === 'object' && !('Quantity' in productData)) {
+            let latestTimestamp = 0;
+            let batchQty = 0;
+
+            Object.entries(productData).forEach(([key, item]: [string, any]) => {
+              if (typeof item !== 'object') return;
+              const timestamp = item.Time_restock || '';
+              const tsValue = new Date(timestamp).getTime();
+
+              if (tsValue > latestTimestamp) {
+                latestItem = item; // Use this for price/threshold info
+                latestTimestamp = tsValue;
+                batchQty = Number(item.Quantity || 0);
+              }
+            });
+            totalQty = batchQty;
+          }
+
+          if (latestItem) {
+            items.push({
+              Name: productName,
+              Quantity: totalQty,
+              'Unit Price': latestItem['Unit Price'],
+              Threshold: latestItem.Threshold
+            });
+          }
+        });
 
         // 1. Metrics Calculation
         const totalProducts = items.length;
